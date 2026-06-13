@@ -19,9 +19,12 @@ No data leaves your machine — everything runs on your own computer.
 |---------|-------------|
 | 📸 Image OCR | JPG / PNG / BMP / TIFF — drag and recognize |
 | 📄 PDF OCR | Automatically converts PDF pages to images, OCRs each page |
+| 📚 Batch Processing | Select multiple files at once — process them all in one go |
+| 👁️ Preview | See the uploaded image/PDF before OCR starts |
 | 🌐 Auto Language | Starts with Chinese; if confidence is low, falls back through 10 other languages |
 | 🎯 Manual Language | Pick a specific language for better accuracy |
-| 📝 Markdown Output | Paragraph grouping by Y-coordinate + confidence detail panel |
+| 📝 Smart Formatting | Paragraph grouping by Y-coordinate + confidence score per text line |
+| 📥 Download Results | Save recognized text as `.txt` or `.md` file |
 | ⚡ One-click Start | Double-click `Start.command` to launch, auto-opens browser |
 
 ### Supported Languages
@@ -69,11 +72,11 @@ venv/bin/python3 ocr_ui.py  # Linux/WSL
 
 ### How It Works
 
-1. **Upload** — image (JPG/PNG/BMP/TIFF) or PDF
-2. **OCR** — PaddleOCR runs locally, detects text and bounding boxes
-3. **Format** — text is grouped into paragraphs by Y-coordinate proximity
-4. **Output** — clean text for copying + detailed confidence table
-5. **PDF** — pages are rendered to images via `pypdfium2`, then OCR'd page by page
+1. **Upload** — one or more images (JPG/PNG/BMP/TIFF) or PDFs. Preview shows the first file.
+2. **OCR** — PaddleOCR runs locally. In auto mode, language is detected automatically with real-time progress feedback.
+3. **Format** — text is grouped into paragraphs by Y-coordinate proximity; each line gets a confidence score.
+4. **Output** — clean text ready to copy. Download as `.txt` or `.md` file with one click.
+5. **PDF** — pages are rendered to images via `pypdfium2`, then OCR'd page by page.
 
 In **auto mode**, the tool first tries Chinese. If average confidence is below 90%, it iterates through all 11 languages and keeps the best result.
 
@@ -101,11 +104,14 @@ Paddleocr-D 是一个轻量级的 OCR 网页工具，在浏览器里拖拽图片
 
 | 功能 | 说明 |
 |------|------|
-| 📸 图片识别 | JPG / PNG / BMP / TIFF 格式拖拽即识别 |
+| 📸 图片识别 | JPG / PNG / BMP / TIFF 拖拽即识别 |
 | 📄 PDF 识别 | 自动将 PDF 逐页转为图片并 OCR |
-| 🌐 自动语言 | 默认用中文识别，置信度不足自动切换其他 10 种语言 |
+| 📚 批量处理 | 一次选择多张图片/PDF，批量识别 |
+| 👁️ 文件预览 | 上传后自动显示图片/PDF 缩略图 |
+| 🌐 自动语言 | 默认用中文，置信度不足自动切换其他 10 种语言 |
 | 🎯 手动指定 | 选定特定语言，准确率更高 |
-| 📝 Markdown 输出 | 按 Y 坐标自动分段，带置信度详情面板 |
+| 📝 智能排版 | 按 Y 坐标自动分段 + 每行文字置信度评分 |
+| 📥 结果下载 | 识别结果一键保存为 `.txt` 或 `.md` 文件 |
 | ⚡ 一键启动 | 双击 `Start.command` 启动，自动打开浏览器 |
 
 ### 支持语言
@@ -149,10 +155,10 @@ cd Paddleocr-D
 
 ### 工作原理
 
-1. **上传** — 拖入图片（JPG/PNG/BMP/TIFF）或 PDF 文件
-2. **OCR** — PaddleOCR 本地运行，检测文字及边界框
-3. **排版** — 根据 Y 坐标将文字自动分段落
-4. **输出** — 纯文本供复制 + 置信度详情面板
+1. **上传** — 拖入单张或多张图片/PDF，自动显示首张缩略图
+2. **OCR** — PaddleOCR 本地运行，自动模式实时显示正在尝试的语言
+3. **排版** — 根据 Y 坐标自动分段落，每行文字标注置信度
+4. **输出** — 纯文本可复制，或一键下载为 `.txt` / `.md` 文件
 5. **PDF** — 通过 `pypdfium2` 将每一页渲染为图片，逐页 OCR
 
 **自动语言模式**的识别策略：先用中文模型识别，如果平均置信度低于 90%，则遍历全部 11 种语言，取最优结果。
