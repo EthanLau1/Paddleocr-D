@@ -8,6 +8,9 @@ import sys
 import tempfile
 import traceback
 
+import json
+import urllib.request
+
 import gradio as gr
 from paddleocr import PaddleOCR
 from PIL import Image
@@ -34,6 +37,42 @@ LANGS = {
     "ru": "Русский",
 }
 LANG_CHOICES = [("🌐 自动识别 (Auto)", "auto")] + [(v, k) for k, v in LANGS.items()]
+
+# ══════════════════════════════════════════════
+#  IP 地理位置 → 自动模式首次使用语言
+# ══════════════════════════════════════════════
+
+_IP_LANG_MAP = {
+    "CN": "ch",  "TW": "ch",  "HK": "ch",
+    "US": "en",  "GB": "en",  "AU": "en",  "CA": "en",  "NZ": "en",
+    "ES": "es",  "MX": "es",  "AR": "es",  "CO": "es",
+    "JP": "japan",
+    "KR": "korean",
+    "PT": "pt",  "BR": "pt",
+    "IT": "it",
+    "FR": "fr",
+    "DE": "german",  "AT": "german",
+    "RU": "ru",
+    "SA": "ar",  "AE": "ar",
+}
+
+
+def _detect_language_from_ip() -> str:
+    """根据 IP 地址猜测用户所在地区，返回推荐语言代码。"""
+    try:
+        req = urllib.request.Request(
+            "http://ip-api.com/json/?fields=countryCode",
+            headers={"User-Agent": "Paddleocr-D/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            cc = json.loads(resp.read().decode()).get("countryCode", "")
+            return _IP_LANG_MAP.get(cc, "ch")
+    except Exception:
+        return "ch"
+
+
+_DEFAULT_LANG = _detect_language_from_ip()
+print(f"🌐 根据 IP 检测，自动模式首次使用语言: {LANGS.get(_DEFAULT_LANG, _DEFAULT_LANG)}")
 
 # ══════════════════════════════════════════════
 #  PaddleOCR 引擎（惰性加载）
@@ -63,6 +102,25 @@ def _get_engine(lang: str) -> PaddleOCR:
 # ══════════════════════════════════════════════
 #  OCR 核心
 # ══════════════════════════════════════════════
+
+
+def _compress_image(image_path: str, max_dim: int = 2000) -> str:
+    """如果图片太大，压缩到 max_dim 以内。返回压缩后的路径。"""
+    try:
+        img = Image.open(image_path)
+        w, h = img.size
+        if max(w, h) <= max_dim:
+            return image_path
+        if w > h:
+            new_w, new_h = max_dim, int(h * max_dim / w)
+        else:
+            new_w, new_h = int(w * max_dim / h), max_dim
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        img.save(tmp.name, "JPEG", quality=92)
+        return tmp.name
+    except Exception:
+        return image_path
 
 
 def _predict(engine: PaddleOCR, image_path: str):
@@ -117,41 +175,39 @@ def _build_output(texts, scores, boxes, best_lang: str, avg: float, lang_mode: b
     return main_text, detail
 
 
-def _ocr_single(image_path: str, lang: str, progress=None):
-    """识别单张图片。
+def _ocr_single(image_path: str, lang: str) -> tuple:
+    """识别单张图片（自动压缩大图）。"""
+    compressed = _compress_image(image_path, 2000)
+    path = compressed
 
-    Args:
-        image_path: 图片路径
-        lang: "auto" 或语言代码
-        progress: 可选 gr.Progress()，传入时会在识别过程中更新状态文字
-    """
-    if lang == "auto":
-        if progress:
-            progress(desc="🌐 自动模式：正在尝试 中文...")
-        texts, scores, avg, boxes = _predict(_get_engine("ch"), image_path)
-        best_lang = "ch"
-        if (not texts) or avg < 0.90:
-            for code in LANGS:
-                if code == "ch":
-                    continue
-                if progress:
-                    progress(desc=f"🌐 自动模式：正在尝试 {LANGS[code]}...")
-                try:
-                    t, s, a, b = _predict(_get_engine(code), image_path)
-                    if t and a > avg:
-                        texts, scores, avg, boxes = t, s, a, b
-                        best_lang = code
-                except Exception:
-                    continue
-    else:
-        if progress:
-            progress(desc=f"🎯 {LANGS.get(lang, lang)}...")
-        texts, scores, avg, boxes = _predict(_get_engine(lang), image_path)
-        best_lang = lang
+    try:
+        if lang == "auto":
+            # 根据 IP 检测到的语言优先尝试
+            first_lang = _DEFAULT_LANG
+            texts, scores, avg, boxes = _predict(_get_engine(first_lang), path)
+            best_lang = first_lang
+            # 置信度 < 60% 才试其他语言
+            if (not texts) or avg < 0.60:
+                for code in LANGS:
+                    if code == first_lang:
+                        continue
+                    try:
+                        t, s, a, b = _predict(_get_engine(code), path)
+                        if t and a > avg:
+                            texts, scores, avg, boxes = t, s, a, b
+                            best_lang = code
+                    except Exception:
+                        continue
+        else:
+            texts, scores, avg, boxes = _predict(_get_engine(lang), path)
+            best_lang = lang
 
-    if not texts:
-        return "", "❌ 未检测到文字"
-    return _build_output(texts, scores, boxes, best_lang, avg, lang == "auto")
+        if not texts:
+            return "", "❌ 未检测到文字"
+        return _build_output(texts, scores, boxes, best_lang, avg, lang == "auto")
+    finally:
+        if compressed != image_path:
+            os.unlink(compressed)
 
 
 # ══════════════════════════════════════════════
@@ -236,13 +292,13 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
 
             if _is_pdf(path):
                 # ── PDF 处理 ──
-                progress((idx + 0.05) / total, desc=f"📄 解析 {name}...")
+                progress((idx + 0.05) / total)
                 pages = _pdf_to_images(path)
                 page_texts, page_details = [], []
 
                 for pidx, pil_img in enumerate(pages):
                     pct = (idx + 0.1 + 0.85 * (pidx + 1) / len(pages)) / total
-                    progress(pct, desc=f"📄 {name} — 第 {pidx+1}/{len(pages)} 页")
+                    progress(pct)
 
                     tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
                     pil_img.save(tmp.name)
@@ -268,8 +324,8 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
             else:
                 # ── 图片处理 ──
                 pct = (idx + 0.5) / total
-                progress(pct, desc=f"🖼️ 识别 {name}...")
-                text, detail = _ocr_single(path, lang, progress)
+                progress(pct)
+                text, detail = _ocr_single(path, lang)
 
                 if total > 1:
                     all_texts.append(f"【{name}】\n{text}" if text else f"【{name}】\n_（未识别到文字）_")
@@ -279,7 +335,7 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
                     all_details.append(detail)
 
         # ── 组装最终结果 ──
-        progress(0.98, desc="📦 生成下载文件...")
+        progress(0.98)
         final_text = "\n\n".join(all_texts) if all_texts else "_（未识别到文字）_"
         final_detail = "\n\n".join(all_details) if all_details else "❌ 未检测到文字"
 
@@ -296,7 +352,7 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
         md_path.write(f"# Paddleocr-D 识别结果\n\n{final_detail}")
         md_path.close()
 
-        progress(1.0, desc="完成 ✅")
+        progress(1.0)
 
         has_result = bool(final_text and not final_text.startswith("_"))
         return (
@@ -393,9 +449,9 @@ with ui:
 
             lang_input = gr.Dropdown(
                 choices=LANG_CHOICES,
-                value="auto",
+                value=_DEFAULT_LANG,
                 label="🌐 选择语言",
-                info="自动识别 = 先试中文，置信度不足自动切换其他 10 种语言",
+                info="自动识别会根据你的地区优先尝试对应语言",
             )
 
             with gr.Row():
