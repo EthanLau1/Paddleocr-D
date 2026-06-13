@@ -57,22 +57,41 @@ _IP_LANG_MAP = {
 }
 
 
+_LANG_CACHE = os.path.join(os.path.dirname(__file__), ".lang_cache")
+
+
 def _detect_language_from_ip() -> str:
-    """根据 IP 地址猜测用户所在地区，返回推荐语言代码。"""
+    """根据 IP 地址猜测用户所在地区，返回推荐语言代码（结果缓存到文件，下次直接读）。"""
+    # 读缓存
+    try:
+        with open(_LANG_CACHE) as f:
+            cached = f.read().strip()
+            if cached in LANGS or cached == "auto":
+                return cached
+    except Exception:
+        pass
+    # API 查询（缩短到 3 秒）
     try:
         req = urllib.request.Request(
             "http://ip-api.com/json/?fields=countryCode",
             headers={"User-Agent": "Paddleocr-D/1.0"},
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             cc = json.loads(resp.read().decode()).get("countryCode", "")
-            return _IP_LANG_MAP.get(cc, "ch")
+            result = _IP_LANG_MAP.get(cc, "ch")
     except Exception:
-        return "ch"
+        result = "ch"
+    # 写缓存
+    try:
+        with open(_LANG_CACHE, "w") as f:
+            f.write(result)
+    except Exception:
+        pass
+    return result
 
 
 _DEFAULT_LANG = _detect_language_from_ip()
-print(f"🌐 根据 IP 检测，自动模式首次使用语言: {LANGS.get(_DEFAULT_LANG, _DEFAULT_LANG)}")
+print(f"🌐 检测到地区，默认语言设为: {LANGS.get(_DEFAULT_LANG, _DEFAULT_LANG)}")
 
 # ══════════════════════════════════════════════
 #  PaddleOCR 引擎（惰性加载）
@@ -365,7 +384,7 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
         )
 
     except gr.Error as e:
-        # 内部校验失败 → 显示错误信息 + 恢复按钮
+        gr.Warning(f"⚠️ {e}")
         return (
             f"❌ {e}", "",
             None, None,
@@ -373,6 +392,7 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
             gr.update(visible=False),
         )
     except MemoryError:
+        gr.Warning("⚠️ 内存不足！图片过大，请压缩后再试。")
         return (
             "❌ 内存不足！图片过大，请压缩后再试。", "",
             None, None,
@@ -381,6 +401,7 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
         )
     except Exception as e:
         traceback.print_exc()
+        gr.Warning(f"⚠️ 发生未知错误: {type(e).__name__}")
         return (
             f"❌ 发生未知错误: {type(e).__name__}: {e}", "",
             None, None,

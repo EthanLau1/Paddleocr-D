@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 .ocr_server.log
 *.app
+.lang_cache
