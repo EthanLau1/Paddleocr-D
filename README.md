@@ -54,14 +54,17 @@ ocr-stop           # or double-click Stop.command
 git clone https://github.com/EthanLau1/Paddleocr-D.git
 cd Paddleocr-D
 
+# Requirements are auto-installed on first launch.
+# Or manually:
 python3 -m venv venv
-source venv/bin/activate
+./venv/bin/pip install -r requirements.txt
+```
 
-# Install PaddleOCR (CPU version)
-pip install paddlepaddle paddleocr gradio pypdfium2 pillow
+Then **double-click `Start.command`** or run:
 
-# Run
-./venv/bin/python3 ocr_ui.py
+```bash
+./Start.command         # macOS
+venv/bin/python3 ocr_ui.py  # Linux/WSL
 ```
 
 ### How It Works
@@ -82,6 +85,7 @@ Paddleocr-D/
 ├── Start.command     # One-click launcher (macOS)
 ├── Stop.command      # One-click stopper (macOS)
 ├── README.md
+├── requirements.txt  # Python dependencies
 └── images/           # Test images
 ```
 
@@ -133,16 +137,15 @@ ocr-stop           # 或双击 Stop.command
 ```bash
 git clone https://github.com/EthanLau1/Paddleocr-D.git
 cd Paddleocr-D
-
-python3 -m venv venv
-source venv/bin/activate
-
-# 安装 PaddleOCR（CPU 版本）
-pip install paddlepaddle paddleocr gradio pypdfium2 pillow
-
-# 启动
-./venv/bin/python3 ocr_ui.py
 ```
+
+**然后双击 `Start.command` 即可**，首次运行会自动完成：
+
+1. ✅ 自动创建 Python 虚拟环境
+2. ✅ 自动安装所有依赖（约 1-3 分钟）
+3. ✅ 自动启动服务并打开浏览器
+
+就是这么简单。用完双击 `Stop.command` 关闭服务。
 
 ### 工作原理
 
@@ -162,6 +165,7 @@ Paddleocr-D/
 ├── Start.command     # 一键启动脚本（macOS）
 ├── Stop.command      # 一键停止脚本（macOS）
 ├── README.md
+├── requirements.txt  # Python 依赖列表
 └── images/           # 测试图片
 ```
 

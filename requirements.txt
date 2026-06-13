@@ -1,0 +1,5 @@
+paddlepaddle
+paddleocr
+gradio
+pypdfium2
+pillow
