@@ -152,7 +152,7 @@ def _predict(engine: PaddleOCR, image_path: str):
         texts = r["rec_texts"]
         scores = r["rec_scores"]
         avg = sum(scores) / len(scores) if scores else 0
-        return texts, scores, avg, r.get("boxes", [])
+        return texts, scores, avg, r.get("rec_polys", [])
     except Exception as e:
         print(f"  ⚠️ OCR 预测失败: {e}")
         return None, None, 0, None
@@ -445,7 +445,7 @@ CSS = """
 footer {display:none !important}
 """
 
-ui = gr.Blocks(title="Paddleocr-D", css=CSS, theme=gr.themes.Monochrome())
+ui = gr.Blocks(title="Paddleocr-D")
 ui.queue(default_concurrency_limit=1)  # 支持取消 + 单次只跑一个 OCR
 
 with ui:
@@ -538,4 +538,7 @@ if __name__ == "__main__":
         server_name="127.0.0.1",
         server_port=7860,
         share=False,
+        css=CSS,
+        theme=gr.themes.Monochrome(),
+        show_error=True,
     )

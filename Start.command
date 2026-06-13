@@ -45,7 +45,7 @@ if [ ! -d "$VENV" ]; then
 
     # 3. 升级 pip
     echo "📦 [3/4] 准备安装工具……"
-    "$VENV/bin/pip" install --upgrade pip -q
+    "$VENV/bin/python3" -m pip install --upgrade pip -q
     echo "✅ 安装工具就绪"
     echo ""
 
@@ -54,7 +54,7 @@ if [ ! -d "$VENV" ]; then
     echo "   正在下载大小约 200-500MB 的文件"
     echo "   网速快的话 1-2 分钟，慢的话可能 5-10 分钟"
     echo ""
-    if ! "$VENV/bin/pip" install -r "$DIR/requirements.txt"; then
+    if ! "$VENV/bin/python3" -m pip install -r "$DIR/requirements.txt"; then
         echo ""
         echo "❌ 下载失败了 😢"
         echo "   可能原因：网络不稳定"
