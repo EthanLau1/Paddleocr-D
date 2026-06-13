@@ -13,6 +13,9 @@ from paddleocr import PaddleOCR
 from PIL import Image
 import pypdfium2 as pdfium
 
+# ── 常量 ──
+_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+
 # ══════════════════════════════════════════════
 #  语言配置
 # ══════════════════════════════════════════════
@@ -60,8 +63,6 @@ def _get_engine(lang: str) -> PaddleOCR:
 # ══════════════════════════════════════════════
 #  OCR 核心
 # ══════════════════════════════════════════════
-
-_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 def _predict(engine: PaddleOCR, image_path: str):
@@ -303,15 +304,33 @@ def ocr_handler(files, lang: str, progress=gr.Progress()):
             final_detail,
             gr.update(value=txt_path.name, visible=has_result),
             gr.update(value=md_path.name, visible=has_result),
+            gr.update(visible=True),   # 恢复「开始识别」
+            gr.update(visible=False),  # 隐藏「取消」
         )
 
-    except gr.Error:
-        raise  # 已有的 gr.Error 直接冒泡
+    except gr.Error as e:
+        # 内部校验失败 → 显示错误信息 + 恢复按钮
+        return (
+            f"❌ {e}", "",
+            None, None,
+            gr.update(visible=True),
+            gr.update(visible=False),
+        )
     except MemoryError:
-        raise gr.Error("❌ 内存不足！图片过大，请压缩后再试。")
+        return (
+            "❌ 内存不足！图片过大，请压缩后再试。", "",
+            None, None,
+            gr.update(visible=True),
+            gr.update(visible=False),
+        )
     except Exception as e:
         traceback.print_exc()
-        raise gr.Error(f"❌ 发生未知错误: {type(e).__name__}: {e}")
+        return (
+            f"❌ 发生未知错误: {type(e).__name__}: {e}", "",
+            None, None,
+            gr.update(visible=True),
+            gr.update(visible=False),
+        )
 
 
 # ══════════════════════════════════════════════
@@ -349,7 +368,10 @@ CSS = """
 footer {display:none !important}
 """
 
-with gr.Blocks(title="Paddleocr-D", css=CSS, theme=gr.themes.Monochrome()) as ui:
+ui = gr.Blocks(title="Paddleocr-D", css=CSS, theme=gr.themes.Monochrome())
+ui.queue(default_concurrency_limit=1)  # 支持取消 + 单次只跑一个 OCR
+
+with ui:
     gr.Markdown(
         "# 🖼️ Paddleocr-D 文字识别\n"
         "拖入图片或 PDF 自动识别文字 · 支持多文件 · 自动语言检测 · 结果可下载"
@@ -376,7 +398,15 @@ with gr.Blocks(title="Paddleocr-D", css=CSS, theme=gr.themes.Monochrome()) as ui
                 info="自动识别 = 先试中文，置信度不足自动切换其他 10 种语言",
             )
 
-            btn = gr.Button("🚀 开始识别", variant="primary", size="lg")
+            with gr.Row():
+                btn = gr.Button("🚀 开始识别", variant="primary", size="lg", scale=3)
+                cancel_btn = gr.Button("⏹ 取消", variant="stop", size="lg", scale=1, visible=False)
+
+            gr.Examples(
+                examples=[["images/test.jpg"]],
+                inputs=[file_input],
+                label="📋 试试样例图片",
+            )
 
         with gr.Column(scale=2):
             text_output = gr.Textbox(
@@ -400,10 +430,26 @@ with gr.Blocks(title="Paddleocr-D", css=CSS, theme=gr.themes.Monochrome()) as ui
     # ── 事件绑定 ──
     file_input.change(fn=create_preview, inputs=file_input, outputs=preview)
 
-    btn.click(
+    # 点击「开始识别」→ 隐藏按钮/显示取消 → 执行 OCR → 恢复按钮
+    ocr_event = btn.click(
+        fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
+        outputs=[btn, cancel_btn],
+    ).then(
         fn=ocr_handler,
         inputs=[file_input, lang_input],
-        outputs=[text_output, detail_output, txt_download, md_download],
+        outputs=[text_output, detail_output, txt_download, md_download, btn, cancel_btn],
+    )
+
+    # 点击「取消」→ 停止 OCR + 恢复按钮
+    cancel_btn.click(
+        fn=lambda: (
+            "⏹ 已取消", "",
+            None, None,
+            gr.update(visible=True),
+            gr.update(visible=False),
+        ),
+        outputs=[text_output, detail_output, txt_download, md_download, btn, cancel_btn],
+        cancels=[ocr_event],
     )
 
     lang_list = " · ".join(LANGS.values())
